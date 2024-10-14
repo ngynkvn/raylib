@@ -58,21 +58,6 @@ fn setDesktopPlatform(raylib: *std.Build.Step.Compile, platform: PlatformBackend
     }
 }
 
-/// TODO: Once the minimum supported version is bumped to 0.14.0, it can be simplified again:
-/// https://github.com/raysan5/raylib/pull/4375#issuecomment-2408998315
-/// https://github.com/raysan5/raylib/blob/9b9c72eb0dc705cde194b053a366a40396acfb67/src/build.zig#L54-L56
-fn srcDir(b: *std.Build) []const u8 {
-    comptime {
-        const order = std.SemanticVersion.order;
-        const parse = std.SemanticVersion.parse;
-        if (order(parse(min_ver) catch unreachable, parse("0.14.0") catch unreachable) != .lt)
-            @compileError("Please take a look at this function again");
-    }
-
-    const src_file = std.fs.path.relative(b.allocator, @src().file, ".") catch @panic("OOM");
-    return std.fs.path.dirname(src_file) orelse ".";
-}
-
 fn compileRaylib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode, options: Options) !*std.Build.Step.Compile {
     raylib_flags_arr.clearRetainingCapacity();
 
@@ -87,8 +72,12 @@ fn compileRaylib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
         "-fno-sanitize=undefined", // https://github.com/raysan5/raylib/issues/3674
     });
     if (options.config) |config| {
-        const file = b.pathJoin(&.{ srcDir(b), "config.h" });
-        const content = try std.fs.cwd().readFileAlloc(b.allocator, file, std.math.maxInt(usize));
+        const file = b.path("src/config.h");
+        const content = try std.fs.cwd().readFileAlloc(
+            b.allocator,
+            file.getPath3(b, null).sub_path,
+            std.math.maxInt(usize),
+        );
         defer b.allocator.free(content);
 
         var lines = std.mem.splitScalar(u8, content, '\n');
@@ -136,26 +125,26 @@ fn compileRaylib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
 
     // No GLFW required on PLATFORM_DRM
     if (options.platform != .drm) {
-        raylib.addIncludePath(b.path(b.pathJoin(&.{ srcDir(b), "external/glfw/include" })));
+        raylib.addIncludePath(b.path("src/external/glfw/include"));
     }
 
     var c_source_files = try std.ArrayList([]const u8).initCapacity(b.allocator, 2);
-    c_source_files.appendSliceAssumeCapacity(&.{ "rcore.c", "utils.c" });
+    c_source_files.appendSliceAssumeCapacity(&.{ "src/rcore.c", "src/utils.c" });
 
     if (options.raudio) {
-        try c_source_files.append("raudio.c");
+        try c_source_files.append("src/raudio.c");
     }
     if (options.rmodels) {
-        try c_source_files.append("rmodels.c");
+        try c_source_files.append("src/rmodels.c");
     }
     if (options.rshapes) {
-        try c_source_files.append("rshapes.c");
+        try c_source_files.append("src/rshapes.c");
     }
     if (options.rtext) {
-        try c_source_files.append("rtext.c");
+        try c_source_files.append("src/rtext.c");
     }
     if (options.rtextures) {
-        try c_source_files.append("rtextures.c");
+        try c_source_files.append("src/rtextures.c");
     }
 
     if (options.opengl_version != .auto) {
@@ -249,7 +238,7 @@ fn compileRaylib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
             // On macos rglfw.c include Objective-C files.
             try raylib_flags_arr.append(b.allocator, "-ObjC");
             raylib.root_module.addCSourceFile(.{
-                .file = b.path(b.pathJoin(&.{ srcDir(b), "rglfw.c" })),
+                .file = b.path("src/rglfw.c"),
                 .flags = raylib_flags_arr.items,
             });
             _ = raylib_flags_arr.pop();
@@ -283,7 +272,7 @@ fn compileRaylib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
     }
 
     raylib.root_module.addCSourceFiles(.{
-        .root = b.path(srcDir(b)),
+        .root = b.path("."),
         .files = c_source_files.items,
         .flags = raylib_flags_arr.items,
     });
@@ -389,9 +378,9 @@ pub fn build(b: *std.Build) !void {
 
     const lib = try compileRaylib(b, target, optimize, options);
 
-    lib.installHeader(b.path(b.pathJoin(&.{ srcDir(b), "raylib.h" })), "raylib.h");
-    lib.installHeader(b.path(b.pathJoin(&.{ srcDir(b), "raymath.h" })), "raymath.h");
-    lib.installHeader(b.path(b.pathJoin(&.{ srcDir(b), "rlgl.h" })), "rlgl.h");
+    lib.installHeader(b.path("src/raylib.h"), "raylib.h");
+    lib.installHeader(b.path("src/raymath.h"), "raymath.h");
+    lib.installHeader(b.path("src/rlgl.h"), "rlgl.h");
 
     b.installArtifact(lib);
 }
@@ -402,17 +391,16 @@ fn waylandGenerate(
     comptime protocol: []const u8,
     comptime basename: []const u8,
 ) void {
-    const waylandDir = b.pathJoin(&.{ srcDir(b), "external/glfw/deps/wayland" });
-    const protocolDir = b.pathJoin(&.{ waylandDir, protocol });
+    const protocolDir = b.path("src/external/glfw/deps/wayland").path(b, protocol);
     const clientHeader = basename ++ ".h";
     const privateCode = basename ++ "-code.h";
 
     const client_step = b.addSystemCommand(&.{ "wayland-scanner", "client-header" });
-    client_step.addFileArg(b.path(protocolDir));
+    client_step.addFileArg(protocolDir);
     raylib.addIncludePath(client_step.addOutputFileArg(clientHeader).dirname());
 
     const private_step = b.addSystemCommand(&.{ "wayland-scanner", "private-code" });
-    private_step.addFileArg(b.path(protocolDir));
+    private_step.addFileArg(protocolDir);
     raylib.addIncludePath(private_step.addOutputFileArg(privateCode).dirname());
 
     raylib.step.dependOn(&client_step.step);
