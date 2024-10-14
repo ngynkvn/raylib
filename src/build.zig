@@ -72,12 +72,9 @@ fn compileRaylib(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.
         "-fno-sanitize=undefined", // https://github.com/raysan5/raylib/issues/3674
     });
     if (options.config) |config| {
-        const file = b.path("src/config.h");
-        const content = try std.fs.cwd().readFileAlloc(
-            b.allocator,
-            file.getPath3(b, null).sub_path,
-            std.math.maxInt(usize),
-        );
+        const fp = b.path("src").getPath3(b, null);
+        const file = try fp.openFile("config.h", .{});
+        const content = try file.readToEndAlloc(b.allocator, std.math.maxInt(usize));
         defer b.allocator.free(content);
 
         var lines = std.mem.splitScalar(u8, content, '\n');
