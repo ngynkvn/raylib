@@ -5,8 +5,8 @@
 
     .dependencies = .{
         .xcode_frameworks = .{
-            .url = "git+https://github.com/hexops/xcode-frameworks#a6bf82e032d4d9923ad5c222d466710fcc05f249",
-            .hash = "12208da4dfcd9b53fb367375fb612ec73f38e53015f1ce6ae6d6e8437a637078e170",
+            .url = "git+https://github.com/ngynkvn/xcode-frameworks?ref=hotfix/2605#7529fcd283a10df9b41dc7f77ffe5150954113fd",
+            .hash = "1220ccde118a8e213d723b050ea9859a708d9b6e71476211d9df9023a134e166dd87",
             .lazy = true,
         },
         .emsdk = .{
